@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numerical Skills Assessment & Dyscalculia Profiler</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Merriweather:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --academic-blue: #2c3e50;
+            --academic-gold: #c0392b;
+            --bg-sidebar: #f8f9fa;
+            --text-primary: #2d3748;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: var(--text-primary);
+        }
+        h1, h2, h3, h4 {
+            font-family: 'Merriweather', serif;
+        }
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .nav-item.active { background-color: #e2e8f0; border-right: 4px solid #3b82f6; font-weight: 600; }
+        .nav-item.active.theme-green { background-color: #f0fdf4; border-right: 4px solid #16a34a; color: #15803d; }
+        .nav-item.active.theme-purple { background-color: #faf5ff; border-right: 4px solid #9333ea; color: #7e22ce; }
+        .nav-item.active.theme-cyan { background-color: #ecfeff; border-right: 4px solid #06b6d4; color: #0e7490; }
+        .nav-item.active.theme-amber { background-color: #fffbeb; border-right: 4px solid #d97706; color: #b45309; }
+
+        #drawingCanvas { border: 2px dashed #cbd5e1; background-color: white; cursor: crosshair; touch-action: none; }
+        
+        /* Card Flip Animation */
+        .memory-card { perspective: 1000px; }
+        .memory-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+        .memory-card.flipped .memory-inner { transform: rotateY(180deg); }
+        .memory-front, .memory-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .memory-front { background-color: #3b82f6; color: white; }
+        .memory-back { background-color: white; color: #1e293b; transform: rotateY(180deg); border: 2px solid #e2e8f0; font-weight: bold; font-size: 1.25rem; }
+        .memory-card.matched .memory-back { background-color: #dcfce7; border-color: #22c55e; color: #15803d; }
+
+        /* Bubble Animation */
+        @keyframes floatUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(-100vh); opacity: 1; } }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform -translate-x-full md:translate-x-0 flex flex-col">
+        <div class="p-6 border-b border-gray-100">
+            <h1 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-brain text-blue-600"></i>
+                <span>NumSkills<span class="text-blue-600">Pro</span></span>
+            </h1>
+            <p class="text-xs text-slate-500 mt-1">Dyscalculia Assessment Tool</p>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto py-4">
+            <ul class="space-y-1">
+                <li><button onclick="app.navigateTo('dashboard')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 active" id="nav-dashboard"><i class="fa-solid fa-chart-line w-5"></i> Dashboard</button></li>
+                <li><button onclick="app.navigateTo('checklist')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3" id="nav-checklist"><i class="fa-solid fa-list-check w-5"></i> Symptom Checklist</button></li>
+                
+                <li class="px-6 pt-4 pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Skill Modules</li>
+                <li><button onclick="app.navigateTo('module-magnitude')" class="nav-item w-full text-left px-6 py-2 hover:bg-slate-50 text-slate-600 flex items-center gap-3" id="nav-module-magnitude"><i class="fa-solid fa-scale-unbalanced w-5"></i> Magnitude</button></li>
+                <li><button onclick="app.navigateTo('module-estimation')" class="nav-item w-full text-left px-6 py-2 hover:bg-slate-50 text-slate-600 flex items-center gap-3" id="nav-module-estimation"><i class="fa-solid fa-calculator w-5"></i> Estimation</button></li>
+                <li><button onclick="app.navigateTo('module-facts')" class="nav-item w-full text-left px-6 py-2 hover:bg-slate-50 text-slate-600 flex items-center gap-3" id="nav-module-facts"><i class="fa-solid fa-shapes w-5"></i> Fact Retrieval</button></li>
+                <li><button onclick="app.navigateTo('module-sequencing')" class="nav-item w-full text-left px-6 py-2 hover:bg-slate-50 text-slate-600 flex items-center gap-3" id="nav-module-sequencing"><i class="fa-solid fa-arrow-down-1-9 w-5"></i> Sequencing</button></li>
+                <li><button onclick="app.navigateTo('module-spatial')" class="nav-item w-full text-left px-6 py-2 hover:bg-slate-50 text-slate-600 flex items-center gap-3" id="nav-module-spatial"><i class="fa-solid fa-cube w-5"></i> Spatial Rsng.</button></li>
+                <li><button onclick="app.navigateTo('module-memory')" class="nav-item w-full text-left px-6 py-2 hover:bg-slate-50 text-slate-600 flex items-center gap-3" id="nav-module-memory"><i class="fa-solid fa-memory w-5"></i> Working Memory</button></li>
+                <li class="mt-2"><button onclick="app.navigateTo('handwriting')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3" id="nav-handwriting"><i class="fa-solid fa-pen-fancy w-5"></i> Handwriting Task</button></li>
+                <li class="mt-1"><button onclick="app.navigateTo('module-consolidated')" class="nav-item w-full text-left px-6 py-3 hover:bg-green-50 text-slate-700 flex items-center gap-3" id="nav-module-consolidated"><i class="fa-solid fa-clipboard-check w-5 text-green-600"></i> Consolidated Exam</button></li>
+
+                <!-- Gamified Zone -->
+                <li class="mt-4 border-t border-gray-100 pt-2">
+                    <div class="px-6 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Gamified Zone</div>
+                    <button onclick="app.navigateTo('space-game')" class="nav-item w-full text-left px-6 py-2 hover:bg-purple-50 text-slate-700 flex items-center gap-3" id="nav-space-game"><i class="fa-solid fa-rocket w-5 text-purple-600"></i> Neon Runner</button>
+                    <button onclick="app.navigateTo('aqua-game')" class="nav-item w-full text-left px-6 py-2 hover:bg-cyan-50 text-slate-700 flex items-center gap-3" id="nav-aqua-game"><i class="fa-solid fa-water w-5 text-cyan-600"></i> Aqua Math Pop</button>
+                    <button onclick="app.navigateTo('fact-match')" class="nav-item w-full text-left px-6 py-2 hover:bg-amber-50 text-slate-700 flex items-center gap-3" id="nav-fact-match"><i class="fa-solid fa-puzzle-piece w-5 text-amber-600"></i> Fact Match</button>
+                </li>
+
+                <li class="mt-2 border-t border-gray-100 pt-2">
+                    <button onclick="app.navigateTo('report')" class="nav-item w-full text-left px-6 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3" id="nav-report"><i class="fa-solid fa-file-pdf w-5"></i> Final Report</button>
+                </li>
+            </ul>
+        </nav>
+        <div class="p-4 border-t border-gray-200 text-xs text-slate-500">
+            <div id="auth-status" class="flex items-center gap-2 mb-2">
+                <div class="w-2 h-2 rounded-full bg-yellow-500" id="auth-indicator"></div>
+                <span id="auth-text">Initializing...</span>
+            </div>
+            <span id="user-id-display" class="font-mono text-[10px] break-all"></span>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full md:ml-64 transition-all duration-300">
+        <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-8 shadow-sm z-40">
+            <button id="sidebar-toggle" class="md:hidden text-slate-600 p-2"><i class="fa-solid fa-bars text-xl"></i></button>
+            <h2 id="page-title" class="text-lg md:text-xl font-bold text-slate-800">Dashboard</h2>
+            <div class="flex items-center gap-4">
+                <button onclick="app.saveData(true)" class="text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> <span class="hidden sm:inline">Save Progress</span></button>
+            </div>
+        </header>
+
+        <div id="content-area" class="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50 relative">
+            <!-- Toast -->
+            <div id="notification" class="fixed top-20 right-4 bg-white border-l-4 border-blue-500 text-slate-700 px-4 py-3 shadow-lg rounded transform translate-x-full transition-transform duration-300 z-50 max-w-xs"><p id="notification-msg" class="text-sm font-medium"></p></div>
+            <!-- Loader -->
+            <div id="loading-overlay" class="absolute inset-0 bg-white/80 z-40 flex items-center justify-center hidden"><div class="flex flex-col items-center"><div class="loader mb-3"></div><p id="loading-text" class="text-slate-600 text-sm font-medium">Loading...</p></div></div>
+
+            <!-- DASHBOARD -->
+            <div id="view-dashboard" class="view-section space-y-6 max-w-4xl mx-auto">
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-semibold mb-4 text-slate-800">Candidate Registration</h3>
+                    <form id="registration-form" onsubmit="app.handleRegistration(event)" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium text-slate-700 mb-1">Child's Name</label><input type="text" id="child-name" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required></div>
+                            <div><label class="block text-sm font-medium text-slate-700 mb-1">Child's Age</label><input type="number" id="child-age" min="4" max="18" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required></div>
+                            <div><label class="block text-sm font-medium text-slate-700 mb-1">Parent/Guardian Name</label><input type="text" id="parent-name" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required></div>
+                        </div>
+                        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition shadow-sm">Update Profile</button>
+                    </form>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200"><div class="text-slate-500 text-sm mb-1">Completion</div><div class="text-2xl font-bold text-slate-800" id="progress-percent">0%</div><div class="w-full bg-gray-200 rounded-full h-2.5 mt-2"><div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div></div></div>
+                    <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200"><div class="text-slate-500 text-sm mb-1">Game Scores</div><div class="flex gap-2 text-xs mt-2"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded">Neon: <span id="dash-neon">0</span></span><span class="px-2 py-1 bg-cyan-100 text-cyan-700 rounded">Aqua: <span id="dash-aqua">0</span></span></div></div>
+                    <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200"><div class="text-slate-500 text-sm mb-1">Modules</div><div class="text-2xl font-bold text-slate-800" id="dashboard-modules-count">0/8</div></div>
+                </div>
+            </div>
+
+            <!-- CHECKLIST -->
+            <div id="view-checklist" class="view-section hidden max-w-3xl mx-auto">
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-semibold mb-6 text-slate-800">Behavioral Symptom Checklist</h3>
+                    <form id="checklist-form" onsubmit="app.submitChecklist(event)"><div id="checklist-container" class="space-y-6"></div><div class="mt-8 pt-4 border-t border-gray-100 flex justify-end"><button type="submit" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 shadow-sm font-medium">Submit Checklist</button></div></form>
+                </div>
+            </div>
+
+            <!-- MODULES -->
+            <div id="view-game" class="view-section hidden max-w-3xl mx-auto">
+                <div id="game-container" class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 min-h-[400px] flex flex-col transition-colors duration-300">
+                    <div class="flex justify-between items-center mb-6 pb-4 border-b border-gray-100"><h3 id="game-title" class="text-lg font-semibold text-slate-800">Module</h3><span id="game-progress" class="text-sm text-slate-500 font-mono">Q: 1/5</span></div>
+                    <div id="game-content" class="flex-1"><div id="question-text" class="text-xl font-medium text-center text-slate-800 mb-8 mt-4">Loading...</div><div id="answers-area" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto"></div></div>
+                    <div id="game-feedback" class="mt-6 text-center h-8 text-sm font-bold"></div>
+                    <div class="mt-6 flex justify-between items-center"><button onclick="app.regenerateQuestions()" class="text-xs text-slate-400 hover:text-blue-600 underline" id="regen-btn">Regenerate (AI)</button><button id="next-btn" onclick="app.nextQuestion()" class="bg-blue-600 text-white px-6 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors" disabled>Next</button></div>
+                </div>
+            </div>
+
+            <!-- HANDWRITING -->
+            <div id="view-handwriting" class="view-section hidden max-w-3xl mx-auto">
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-semibold mb-2 text-slate-800">Spatial & Handwriting Task</h3>
+                    <p class="text-slate-600 text-sm mb-4">Instructions: Draw a <strong>triangle inside a square</strong>, and write the number <strong>8</strong>.</p>
+                    <div class="relative w-full h-80 mb-4"><canvas id="drawingCanvas" class="w-full h-full rounded"></canvas><button onclick="app.clearCanvas()" class="absolute top-2 right-2 bg-white/90 border border-gray-300 text-xs px-2 py-1 rounded hover:bg-red-50 text-red-600">Clear</button></div>
+                    <div class="flex flex-col md:flex-row gap-4 items-center justify-between border-t border-gray-100 pt-4"><div class="w-full md:w-auto"><label class="block text-xs font-medium text-slate-500 mb-1">Upload Previous Work</label><input type="file" id="file-upload-sim" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/></div><button onclick="app.saveHandwriting()" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 shadow-sm w-full md:w-auto">Save Task</button></div>
+                </div>
+            </div>
+
+            <!-- NEON RUNNER -->
+            <div id="view-space-game" class="view-section hidden h-full flex flex-col p-4">
+                <div class="relative w-full h-full bg-gray-900 rounded-xl overflow-hidden shadow-2xl border-4 border-slate-800 max-w-5xl mx-auto">
+                    <canvas id="spaceCanvas" class="absolute inset-0 w-full h-full"></canvas>
+                    <div class="absolute top-0 left-0 right-0 p-6 flex justify-between items-start pointer-events-none z-10">
+                        <div class="bg-slate-900/80 backdrop-blur px-4 py-2 rounded border border-purple-500/30 text-purple-400 font-mono text-xl">Score: <span id="space-score-disp">0</span></div>
+                        <div class="bg-slate-900/80 backdrop-blur px-6 py-3 rounded-xl border-2 border-white/20 text-white font-bold text-3xl" id="space-question-disp">READY</div>
+                        <div class="bg-slate-900/80 backdrop-blur px-4 py-2 rounded border border-red-500/30 text-red-400 font-mono text-xl">Lives: <span id="space-lives-disp">3</span></div>
+                    </div>
+                    <div id="space-start-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 backdrop-blur-sm">
+                        <h2 class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-4 drop-shadow-lg">NEON RUNNER</h2>
+                        <button onclick="app.startSpaceGame()" class="px-8 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-full shadow-lg transition transform hover:scale-105"><i class="fa-solid fa-play mr-2"></i> LAUNCH</button>
+                    </div>
+                    <div id="space-gameover-overlay" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-20">
+                        <h2 class="text-4xl font-bold text-red-500 mb-2">GAME OVER</h2>
+                        <p class="text-white text-xl mb-6">Score: <span id="space-final-score">0</span></p>
+                        <button onclick="app.resetSpaceGameUI()" class="px-6 py-2 border border-white text-white hover:bg-white hover:text-black transition rounded">Try Again</button>
+                        <button onclick="app.navigateTo('dashboard')" class="mt-4 text-gray-400 hover:text-white text-sm">Exit</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AQUA MATH POP -->
+            <div id="view-aqua-game" class="view-section hidden h-full flex flex-col p-4">
+                <div class="relative w-full h-full bg-cyan-900 rounded-xl overflow-hidden shadow-2xl border-4 border-cyan-800 max-w-5xl mx-auto relative">
+                    <canvas id="aquaCanvas" class="absolute inset-0 w-full h-full cursor-pointer"></canvas>
+                    <div class="absolute top-4 left-0 right-0 text-center pointer-events-none">
+                        <div class="inline-block bg-white/20 backdrop-blur-md px-8 py-3 rounded-full border border-white/40 text-white font-bold text-2xl shadow-lg">
+                            Mission: <span id="aqua-mission" class="text-yellow-300">Pop Even Numbers!</span>
+                        </div>
+                    </div>
+                    <div class="absolute top-4 right-4 bg-white/20 backdrop-blur px-4 py-2 rounded-lg border border-white/30 text-white font-mono pointer-events-none">
+                        Score: <span id="aqua-score">0</span>
+                    </div>
+                    <!-- Start/End Overlay -->
+                    <div id="aqua-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-cyan-900/90 z-20 backdrop-blur-sm">
+                        <h2 class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-500 mb-4 drop-shadow-lg">AQUA MATH POP</h2>
+                        <p class="text-cyan-100 mb-8 text-lg max-w-md text-center">Bubbles are floating up! Click the correct ones before they float away.</p>
+                        <button onclick="app.startAquaGame()" class="px-8 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-full shadow-lg transition transform hover:scale-105">
+                            <i class="fa-solid fa-play mr-2"></i> DIVE IN
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FACT MATCH -->
+            <div id="view-fact-match" class="view-section hidden max-w-4xl mx-auto">
+                <div class="bg-amber-50 p-6 rounded-xl border border-amber-200 shadow-sm min-h-[500px] flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-2xl font-bold text-amber-800"><i class="fa-solid fa-puzzle-piece mr-2"></i>Fact Match</h3>
+                        <div class="text-amber-700 font-mono bg-amber-100 px-3 py-1 rounded">Moves: <span id="match-moves">0</span></div>
+                    </div>
+                    <div id="match-grid" class="grid grid-cols-4 gap-4 flex-1">
+                        <!-- Cards injected here -->
+                    </div>
+                    <div id="match-complete" class="hidden flex flex-col items-center justify-center mt-6 p-6 bg-white/50 rounded-lg">
+                        <h4 class="text-xl font-bold text-green-600 mb-2">Level Complete!</h4>
+                        <button onclick="app.startFactMatch()" class="bg-amber-600 text-white px-6 py-2 rounded hover:bg-amber-700">Play Again</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORT -->
+            <div id="view-report" class="view-section hidden max-w-4xl mx-auto">
+                <div class="bg-white p-8 rounded-lg shadow-sm border border-slate-200">
+                    <div class="text-center mb-8 border-b border-gray-100 pb-4">
+                        <h2 class="text-2xl font-serif font-bold text-slate-800">Assessment Report</h2>
+                        <p class="text-slate-500 text-sm mt-1">Numerical Skills Profile</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                        <div><h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-4">Performance Profile</h4><div class="relative h-64 w-full"><canvas id="radarChart"></canvas></div></div>
+                        <div class="space-y-4">
+                            <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide flex justify-between items-center">Summary <button onclick="app.generateReportInsights()" class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> AI Analyze</button></h4>
+                            <div class="bg-slate-50 p-4 rounded border border-slate-100 text-sm text-slate-700"><p><strong>Name:</strong> <span id="report-child-name">--</span></p><p><strong>Age:</strong> <span id="report-child-age">--</span></p></div>
+                            <div id="report-insights" class="text-sm text-slate-600 space-y-2 prose prose-sm max-w-none"><p class="italic text-slate-400">Complete modules to generate insights.</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const userProvidedConfig = {};
+    const apiKey = "AIzaSyDACORYtVjO-pCuc3qEbYrCaUElGpK3n5U"; 
+
+    let useLocalStorage = false;
+    let firebaseApp, auth, db;
+    let currentUser = null;
+    let appId = 'default-app';
+
+    let firebaseConfig = {};
+    try {
+        if (Object.keys(userProvidedConfig).length > 0) { firebaseConfig = userProvidedConfig; appId = userProvidedConfig.projectId || 'local-app'; } 
+        else if (typeof __firebase_config !== 'undefined') { firebaseConfig = JSON.parse(__firebase_config); appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app'; }
+    } catch (e) { }
+
+    if (Object.keys(firebaseConfig).length > 0) {
+        try { firebaseApp = initializeApp(firebaseConfig); auth = getAuth(firebaseApp); db = getFirestore(firebaseApp); } catch (e) { useLocalStorage = true; }
+    } else { useLocalStorage = true; }
+
+    const state = {
+        profile: { childName: '', parentName: '', age: 8 },
+        checklist: {},
+        scores: { checklist: 0, magnitude: 0, estimation: 0, facts: 0, sequencing: 0, spatial: 0, memory: 0, handwriting: 0, consolidated: 0, neonRunner: 0, aquaMath: 0, factMatch: 0 },
+        moduleCounts: { magnitude: 0, estimation: 0, facts: 0, sequencing: 0, spatial: 0, memory: 0, consolidated: 0 },
+        totalQuestions: { magnitude: 0, estimation: 0, facts: 0, sequencing: 0, spatial: 0, memory: 0, consolidated: 0 },
+        currentModuleData: [], currentQuestionIndex: 0, currentScoreInModule: 0
+    };
+
+    const fallbackQuestions = {
+        magnitude: [{q:"Larger?",options:["15","51"],a:"51"},{q:"Smaller?",options:["102","98"],a:"98"},{q:"Largest",options:["33","43","34"],a:"43"}],
+        estimation: [{q:"12+29 approx?",options:["40","50"],a:"40"},{q:"105-48 approx?",options:["50","100"],a:"50"}],
+        facts: [{q:"7+6=",options:["13","14"],a:"13"},{q:"8x5=",options:["40","45"],a:"40"}],
+        sequencing: [{q:"2,4,6,?",options:["8","9"],a:"8"},{q:"10,20,30,?",options:["40","50"],a:"40"}],
+        spatial: [{q:"3 sides?",options:["Triangle","Square"],a:"Triangle"},{q:"Cube is?",options:["2D","3D"],a:"3D"}],
+        memory: [{q:"Remember 5,9. First?",options:["5","9"],a:"5"},{q:"Last of 842?",options:["2","4"],a:"2"}]
+    };
+
+    // --- NEON RUNNER GAME ---
+    class SpaceGame {
+        constructor() {
+            this.canvas = document.getElementById('spaceCanvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.active = false;
+            this.resize();
+            window.addEventListener('resize', () => this.resize());
+            this.canvas.addEventListener('mousemove', e => this.playerX = e.clientX - this.canvas.getBoundingClientRect().left);
+            this.canvas.addEventListener('touchmove', e => { e.preventDefault(); this.playerX = e.touches[0].clientX - this.canvas.getBoundingClientRect().left; }, {passive: false});
+        }
+        resize() { if(this.canvas.parentElement) { this.canvas.width = this.canvas.parentElement.clientWidth; this.canvas.height = this.canvas.parentElement.clientHeight; this.playerY = this.canvas.height - 100; } }
+        start() {
+            this.active = true; this.score = 0; this.lives = 3; this.gates = []; this.particles = []; this.speed = 1.2; this.playerX = this.canvas.width / 2;
+            this.stars = Array(100).fill().map(()=>({x:Math.random()*this.canvas.width,y:Math.random()*this.canvas.height,size:Math.random()*2,speed:Math.random()*3+0.5}));
+            this.spawnGate(); requestAnimationFrame(t => this.loop(t));
+        }
+        updateUI() { document.getElementById('space-score-disp').innerText = this.score; document.getElementById('space-lives-disp').innerText = "❤️".repeat(this.lives); if(this.currEq) document.getElementById('space-question-disp').innerText = this.currEq.text; }
+        spawnGate() {
+            let a=Math.floor(Math.random()*10)+1, b=Math.floor(Math.random()*10)+1, op=Math.random()>.5?'+':'-', ans=op==='+'?a+b:a-b;
+            if(ans<0){let t=a;a=b;b=t;ans=a-b;} this.currEq={text:`${a} ${op} ${b} = ?`,ans};
+            this.updateUI();
+            let wrong=ans+(Math.random()>.5?1:-1)*(Math.floor(Math.random()*3)+1);
+            this.gates.push({y:-100,left:Math.random()>.5,cor:ans,wro:wrong,hit:false});
+        }
+        loop() {
+            if(!this.active) return;
+            this.ctx.fillStyle='#0f172a'; this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+            this.ctx.fillStyle='#fff'; this.stars.forEach(s=>{s.y+=s.speed;if(s.y>this.canvas.height)s.y=0;this.ctx.beginPath();this.ctx.arc(s.x,s.y,s.size,0,Math.PI*2);this.ctx.fill()});
+            
+            if(this.gates.length===0||this.gates[this.gates.length-1].y>250) if(Math.random()<.02) this.spawnGate();
+            
+            this.gates.forEach(g => {
+                g.y+=this.speed;
+                let mid=this.canvas.width/2, gw=120, gh=80, lx=mid-150-gw/2, rx=mid+150-gw/2;
+                this.ctx.fillStyle=g.left?'rgba(34,197,94,0.2)':'rgba(239,68,68,0.2)'; this.ctx.strokeStyle=g.left?'#22c55e':'#ef4444';
+                this.ctx.lineWidth=2; this.ctx.fillRect(lx,g.y,gw,gh); this.ctx.strokeRect(lx,g.y,gw,gh); this.ctx.fillRect(rx,g.y,gw,gh); this.ctx.strokeRect(rx,g.y,gw,gh);
+                this.ctx.fillStyle='#fff'; this.ctx.font='bold 30px monospace'; this.ctx.textAlign='center';
+                this.ctx.fillText(g.left?g.cor:g.wro,lx+gw/2,g.y+50); this.ctx.fillText(g.left?g.wro:g.cor,rx+gw/2,g.y+50);
+
+                if(!g.hit && g.y+gh>this.playerY && g.y<this.playerY+40) {
+                    if((this.playerX<mid) === g.left) { this.score+=10; this.speed+=0.05; g.hit=true; } 
+                    else { this.lives--; g.hit=true; if(this.lives<=0){this.active=false;document.getElementById('space-gameover-overlay').classList.remove('hidden');document.getElementById('space-final-score').innerText=this.score;if(this.score>state.scores.neonRunner){state.scores.neonRunner=this.score;app.saveData();}} }
+                    this.updateUI();
+                }
+            });
+            this.gates=this.gates.filter(g=>g.y<this.canvas.height+100);
+            
+            this.ctx.save(); this.ctx.translate(this.playerX,this.playerY); this.ctx.beginPath(); this.ctx.moveTo(0,-30); this.ctx.lineTo(20,20); this.ctx.lineTo(0,10); this.ctx.lineTo(-20,20); this.ctx.fillStyle='#c026d3'; this.ctx.fill(); this.ctx.restore();
+            requestAnimationFrame(()=>this.loop());
+        }
+    }
+
+    // --- AQUA MATH GAME ---
+    class AquaGame {
+        constructor() {
+            this.canvas = document.getElementById('aquaCanvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.active = false;
+            this.bubbles = [];
+            this.resize();
+            window.addEventListener('resize', () => this.resize());
+            this.canvas.addEventListener('click', (e) => this.handleClick(e));
+            this.canvas.addEventListener('touchstart', (e) => {
+                const r = this.canvas.getBoundingClientRect();
+                this.handleClick({offsetX: e.touches[0].clientX - r.left, offsetY: e.touches[0].clientY - r.top});
+            }, {passive: false});
+        }
+        resize() { if(this.canvas.parentElement){this.canvas.width=this.canvas.parentElement.clientWidth;this.canvas.height=this.canvas.parentElement.clientHeight;} }
+        start() {
+            this.active = true; this.score = 0; this.bubbles = []; this.frameCount = 0;
+            this.rule = Math.random() > 0.5 ? "even" : "odd"; // Simple start rule
+            document.getElementById('aqua-mission').innerText = this.rule === "even" ? "Pop Even Numbers!" : "Pop Odd Numbers!";
+            document.getElementById('aqua-overlay').classList.add('hidden');
+            requestAnimationFrame(() => this.loop());
+        }
+        spawnBubble() {
+            const r = 30 + Math.random()*20;
+            // Calculate speed offset based on score to increase difficulty gradually
+            const speedOffset = this.score * 0.02; 
+            this.bubbles.push({
+                x: r + Math.random() * (this.canvas.width - 2*r),
+                y: this.canvas.height + r,
+                r: r,
+                val: Math.floor(Math.random() * 50) + 1,
+                speed: (0.5 + Math.random() * 1.0) + speedOffset, // Start slow (0.5-1.5 range) and increase
+                color: `hsla(${180 + Math.random()*40}, 80%, 60%, 0.6)`
+            });
+        }
+        handleClick(e) {
+            if (!this.active) return;
+            const ex = e.offsetX, ey = e.offsetY;
+            for (let i = this.bubbles.length - 1; i >= 0; i--) {
+                const b = this.bubbles[i];
+                const dist = Math.sqrt((ex - b.x)**2 + (ey - b.y)**2);
+                if (dist < b.r) {
+                    // Check logic
+                    const isEven = b.val % 2 === 0;
+                    const correct = (this.rule === "even" && isEven) || (this.rule === "odd" && !isEven);
+                    if (correct) { this.score += 10; } else { this.score = Math.max(0, this.score - 5); }
+                    document.getElementById('aqua-score').innerText = this.score;
+                    this.bubbles.splice(i, 1);
+                    break; // Only pop top one
+                }
+            }
+        }
+        loop() {
+            if (!this.active) return;
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.frameCount++;
+            if (this.frameCount % 60 === 0) this.spawnBubble();
+
+            // Draw Bubbles
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 2;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.font = 'bold 20px Inter';
+
+            this.bubbles.forEach(b => {
+                b.y -= b.speed;
+                this.ctx.fillStyle = b.color;
+                this.ctx.beginPath();
+                this.ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+                this.ctx.fill();
+                this.ctx.stroke();
+                this.ctx.fillStyle = '#fff';
+                this.ctx.fillText(b.val, b.x, b.y);
+            });
+
+            // Cleanup offscreen
+            this.bubbles = this.bubbles.filter(b => b.y + b.r > -50);
+            
+            requestAnimationFrame(() => this.loop());
+        }
+        stop() {
+            this.active = false;
+            if (this.score > state.scores.aquaMath) { state.scores.aquaMath = this.score; app.saveData(); }
+            document.getElementById('aqua-overlay').classList.remove('hidden');
+        }
+    }
+
+    const spaceGame = new SpaceGame();
+    const aquaGame = new AquaGame();
+
+    window.app = {
+        init: async () => {
+            if (useLocalStorage) { app.setLocalModeUI(); app.loadFromLocalStorage(); }
+            else { 
+                onAuthStateChanged(auth, (user) => {
+                    if (user) { currentUser = user; app.setupDataListener(user.uid); document.getElementById('auth-text').innerText = "Online"; document.getElementById('auth-indicator').classList.replace('bg-yellow-500', 'bg-green-500'); }
+                });
+                signInAnonymously(auth).catch(() => { useLocalStorage=true; app.setLocalModeUI(); app.loadFromLocalStorage(); });
+            }
+            // Update Dashboard scores
+            app.updateDashboardUI();
+        },
+        setLocalModeUI: () => { document.getElementById('auth-text').innerText = "Offline"; document.getElementById('auth-indicator').classList.replace('bg-yellow-500', 'bg-blue-500'); currentUser = {uid:'local'}; },
+        loadFromLocalStorage: () => { const d = localStorage.getItem('numskills_data'); if(d) { Object.assign(state, JSON.parse(d)); app.updateDashboardUI(); } },
+        setupDataListener: (uid) => { onSnapshot(doc(db, 'artifacts', appId, 'users', uid, 'data', 'assessment_profile'), (snap) => { if(snap.exists()) { Object.assign(state, snap.data()); app.updateDashboardUI(); } }); },
+        saveData: async (manual) => {
+            if(useLocalStorage) { localStorage.setItem('numskills_data', JSON.stringify(state)); if(manual) app.showNotification("Saved locally"); return; }
+            if(!currentUser) return;
+            try { await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'assessment_profile'), state, {merge:true}); if(manual) app.showNotification("Saved to Cloud"); } catch(e) {}
+        },
+
+        navigateTo: (viewId) => {
+            spaceGame.active = false; aquaGame.active = false; // Stop loop games
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active', 'theme-green', 'theme-purple', 'theme-cyan', 'theme-amber', 'border-r-4', 'border-blue-600', 'font-semibold'));
+            
+            let target = '', navId = `nav-${viewId}`;
+            if (viewId.startsWith('module-')) { target = 'view-game'; app.startModule(viewId.split('-')[1]); }
+            else target = `view-${viewId}`;
+            
+            document.getElementById(target).classList.remove('hidden');
+            const navEl = document.getElementById(navId);
+            if(navEl) {
+                navEl.classList.add('active');
+                if(viewId === 'module-consolidated') navEl.classList.add('theme-green');
+                if(viewId === 'space-game') navEl.classList.add('theme-purple');
+                if(viewId === 'aqua-game') navEl.classList.add('theme-cyan');
+                if(viewId === 'fact-match') navEl.classList.add('theme-amber');
+            }
+            if(viewId==='fact-match') app.startFactMatch();
+            if(viewId==='space-game') setTimeout(()=>spaceGame.resize(), 100);
+            if(viewId==='aqua-game') setTimeout(()=>aquaGame.resize(), 100);
+            if(viewId==='dashboard') app.updateDashboardUI();
+            if(viewId==='report') app.renderReport();
+            if(window.innerWidth < 768) document.getElementById('sidebar').classList.add('-translate-x-full');
+        },
+
+        // --- FACT MATCH LOGIC ---
+        startFactMatch: () => {
+            const grid = document.getElementById('match-grid');
+            grid.innerHTML = '';
+            document.getElementById('match-complete').classList.add('hidden');
+            
+            // Generate Pairs (Simple facts)
+            const pairs = [
+                {q:'2+2', a:'4'}, {q:'5+3', a:'8'}, {q:'10-4', a:'6'}, {q:'3x3', a:'9'},
+                {q:'Half of 10', a:'5'}, {q:'12-2', a:'10'}, {q:'4+1', a:'5'}, {q:'1+1', a:'2'}
+            ];
+            // Pick 8 items (total 16 cards)
+            const deck = [];
+            pairs.slice(0, 8).forEach((p, i) => {
+                deck.push({ id: i, text: p.q, type: 'q', matchId: i });
+                deck.push({ id: i, text: p.a, type: 'a', matchId: i });
+            });
+            // Shuffle
+            deck.sort(() => Math.random() - 0.5);
+            
+            let firstCard = null;
+            let moves = 0;
+            let matches = 0;
+            document.getElementById('match-moves').innerText = 0;
+
+            deck.forEach((card, idx) => {
+                const el = document.createElement('div');
+                el.className = 'memory-card cursor-pointer h-24';
+                el.innerHTML = `
+                    <div class="memory-inner">
+                        <div class="memory-front"><i class="fa-solid fa-question text-2xl"></i></div>
+                        <div class="memory-back">${card.text}</div>
+                    </div>
+                `;
+                el.onclick = () => {
+                    if (el.classList.contains('flipped') || el.classList.contains('matched') || document.querySelectorAll('.flipped:not(.matched)').length >= 2) return;
+                    
+                    el.classList.add('flipped');
+                    
+                    if (!firstCard) {
+                        firstCard = { el, card };
+                    } else {
+                        moves++;
+                        document.getElementById('match-moves').innerText = moves;
+                        if (firstCard.card.matchId === card.matchId) {
+                            // Match
+                            el.classList.add('matched');
+                            firstCard.el.classList.add('matched');
+                            firstCard = null;
+                            matches++;
+                            if(matches === 8) {
+                                document.getElementById('match-complete').classList.remove('hidden');
+                                state.scores.factMatch = Math.max(state.scores.factMatch, 100 - (moves-8)*5); // Simple score logic
+                                app.saveData();
+                            }
+                        } else {
+                            // Mismatch
+                            setTimeout(() => {
+                                el.classList.remove('flipped');
+                                firstCard.el.classList.remove('flipped');
+                                firstCard = null;
+                            }, 1000);
+                        }
+                    }
+                };
+                grid.appendChild(el);
+            });
+        },
+
+        // --- AQUA GAME TRIGGERS ---
+        startAquaGame: () => { aquaGame.start(); },
+
+        // --- SPACE GAME TRIGGERS ---
+        startSpaceGame: () => { document.getElementById('space-start-overlay').classList.add('hidden'); document.getElementById('space-gameover-overlay').classList.add('hidden'); spaceGame.start(); },
+        resetSpaceGameUI: () => { document.getElementById('space-start-overlay').classList.remove('hidden'); document.getElementById('space-gameover-overlay').classList.add('hidden'); },
+
+        // ... Rest of existing functions (modules, registration, report, etc) ...
+        startModule: async (type) => {
+            const isConsolidated = type === 'consolidated';
+            const cont = document.getElementById('game-container');
+            cont.className = isConsolidated ? "bg-green-50 p-6 rounded-lg shadow-sm border border-green-200 min-h-[400px] flex flex-col transition-colors" : "bg-white p-6 rounded-lg shadow-sm border border-slate-200 min-h-[400px] flex flex-col transition-colors";
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            await new Promise(r => setTimeout(r, 500));
+            state.currentModuleType = type;
+            state.currentModuleData = type === 'consolidated' ? [...fallbackQuestions.magnitude, ...fallbackQuestions.estimation] : (fallbackQuestions[type] || fallbackQuestions['magnitude']);
+            state.currentQuestionIndex = 0; state.currentScoreInModule = 0;
+            document.getElementById('loading-overlay').classList.add('hidden');
+            app.renderQuestion();
+        },
+        renderQuestion: () => {
+            const q = state.currentModuleData[state.currentQuestionIndex];
+            if(!q) { app.finishModule(); return; }
+            document.getElementById('question-text').innerText = q.q;
+            const div = document.getElementById('answers-area'); div.innerHTML = '';
+            q.options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded hover:border-blue-400 transition";
+                btn.innerText = opt;
+                btn.onclick = () => { 
+                    if(opt===q.a) state.currentScoreInModule++; 
+                    document.getElementById('next-btn').disabled=false; 
+                };
+                div.appendChild(btn);
+            });
+        },
+        nextQuestion: () => { state.currentQuestionIndex++; app.renderQuestion(); },
+        finishModule: () => { state.scores[state.currentModuleType] = Math.round((state.currentScoreInModule/state.currentModuleData.length)*100); app.saveData(); app.navigateTo('dashboard'); },
+        updateDashboardUI: () => {
+            document.getElementById('child-name').value = state.profile.childName;
+            document.getElementById('dash-neon').innerText = state.scores.neonRunner || 0;
+            document.getElementById('dash-aqua').innerText = state.scores.aquaMath || 0;
+        },
+        handleRegistration: (e) => { e.preventDefault(); state.profile.childName = document.getElementById('child-name').value; app.saveData(); },
+        showNotification: (msg) => { const n = document.getElementById('notification'); document.getElementById('notification-msg').innerText=msg; n.classList.remove('translate-x-full'); setTimeout(()=>n.classList.add('translate-x-full'),2000); },
+        renderChecklistForm: () => { /* Checkbox logic */ },
+        initCanvas: () => { /* Drawing logic */ },
+        clearCanvas: () => { const c=document.getElementById('drawingCanvas'); c.getContext('2d').clearRect(0,0,c.width,c.height); },
+        saveHandwriting: () => { state.scores.handwriting=100; app.saveData(); app.navigateTo('dashboard'); },
+        renderReport: () => { 
+             // Chart update logic with new games included
+             const labels = ["Magnitude", "Estimation", "Facts", "Sequencing", "Spatial", "Memory", "Neon", "Aqua"];
+             const data = labels.map(l => {
+                 const k = l.toLowerCase().replace('neon','neonRunner').replace('aqua','aquaMath');
+                 return state.scores[k] || 0;
+             });
+             const ctx = document.getElementById('radarChart').getContext('2d');
+             if(window.myRadar) window.myRadar.destroy();
+             window.myRadar = new Chart(ctx, { type: 'radar', data: { labels, datasets: [{ label: 'Score', data, backgroundColor: 'rgba(59,130,246,0.2)', borderColor: '#3b82f6' }] }, options: { scales: { r: { suggestedMin: 0, suggestedMax: 100 } } } });
+             document.getElementById('report-child-name').innerText = state.profile.childName;
+        }
+    };
+
+    document.getElementById('sidebar-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('-translate-x-full'));
+    app.init();
+</script>
+</body>
+</html>
