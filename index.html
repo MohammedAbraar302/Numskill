@@ -11,10 +11,17 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+    <!-- Error Handler for Debugging -->
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            console.error("Error: " + msg + "\nLine: " + line);
+        };
+    </script>
+
+    <!-- API Configuration -->
+    <script>
+        window.API_BASE_URL = 'http://localhost:5000/api';
+    </script>
 
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -71,8 +78,8 @@
 </head>
 <body class="h-screen flex overflow-hidden">
 
-    <!-- Sidebar -->
-    <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform -translate-x-full md:translate-x-0 flex flex-col">
+    <!-- Sidebar (Hidden initially) -->
+    <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform -translate-x-full flex flex-col hidden">
         <div class="p-6 border-b border-gray-100">
             <h1 class="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <i class="fa-solid fa-brain text-blue-600"></i>
@@ -111,20 +118,33 @@
         </nav>
         <div class="p-4 border-t border-gray-200 text-xs text-slate-500">
             <div id="auth-status" class="flex items-center gap-2 mb-2">
-                <div class="w-2 h-2 rounded-full bg-yellow-500" id="auth-indicator"></div>
-                <span id="auth-text">Initializing...</span>
+                <div class="w-2 h-2 rounded-full bg-gray-300" id="auth-indicator"></div>
+                <span id="auth-text">Checking Auth...</span>
             </div>
             <span id="user-id-display" class="font-mono text-[10px] break-all"></span>
+            <button onclick="app.signOutUser()" class="w-full mt-2 bg-red-50 text-red-600 text-xs py-1.5 rounded hover:bg-red-100 transition"><i class="fa-solid fa-sign-out-alt"></i> Sign Out</button>
         </div>
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-full md:ml-64 transition-all duration-300">
-        <header class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-8 shadow-sm z-40">
-            <button id="sidebar-toggle" class="md:hidden text-slate-600 p-2"><i class="fa-solid fa-bars text-xl"></i></button>
+    <main class="flex-1 flex flex-col h-full w-full transition-all duration-300 md:ml-0" id="main-container">
+        
+        <!-- MAIN HEADER (Hidden on Auth Page) -->
+        <header id="main-header" class="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-8 shadow-sm z-40 hidden">
+            <button id="sidebar-toggle" class="text-slate-600 p-2"><i class="fa-solid fa-bars text-xl"></i></button>
             <h2 id="page-title" class="text-lg md:text-xl font-bold text-slate-800">Dashboard</h2>
-            <div class="flex items-center gap-4">
-                <button onclick="app.saveData(true)" class="text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> <span class="hidden sm:inline">Save Progress</span></button>
+            <div class="flex items-center gap-2 md:gap-4">
+                <button onclick="app.exportData()" class="text-sm bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded-md hover:bg-slate-50 transition-colors flex items-center gap-2" title="Export Backup">
+                    <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Export</span>
+                </button>
+                <label class="text-sm bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded-md hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer" title="Import Backup">
+                    <i class="fa-solid fa-upload"></i> <span class="hidden sm:inline">Import</span>
+                    <input type="file" class="hidden" onchange="app.importData(this)" accept=".json">
+                </label>
+                <div class="h-6 w-px bg-slate-300 mx-1"></div>
+                <button onclick="app.saveData(true)" class="text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors flex items-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> <span class="hidden sm:inline">Save</span>
+                </button>
             </div>
         </header>
 
@@ -134,10 +154,38 @@
             <!-- Loader -->
             <div id="loading-overlay" class="absolute inset-0 bg-white/80 z-40 flex items-center justify-center hidden"><div class="flex flex-col items-center"><div class="loader mb-3"></div><p id="loading-text" class="text-slate-600 text-sm font-medium">Loading...</p></div></div>
 
+            <!-- VIEW: LOADING (Initial state before auth confirmation) -->
+            <div id="view-loading" class="view-section flex items-center justify-center h-full -mt-16">
+                <div class="text-center bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md">
+                    <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4"><i class="fa-solid fa-brain"></i></div>
+                    <h1 class="text-2xl font-bold text-slate-800">NumSkills<span class="text-blue-600">Pro</span></h1>
+                    <p class="text-slate-500 text-sm mb-6">Securing Session...</p>
+                    <div class="loader mx-auto mb-4"></div>
+                    <p id="auth-flow-status" class="text-xs text-slate-500">Connecting to Cloud Services.</p>
+                </div>
+            </div>
+
+            <!-- VIEW: PROFILE SETUP (Acts as required login page) -->
+            <div id="view-profile-setup" class="view-section flex items-center justify-center h-full -mt-16 hidden">
+                <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md">
+                    <div class="text-center mb-6">
+                        <h2 class="text-2xl font-bold text-slate-800 mb-2">Welcome! Enter Candidate Profile</h2>
+                        <p class="text-slate-500 text-sm">This is the required first step to start saving assessment data.</p>
+                    </div>
+                    <form id="initial-registration-form" onsubmit="app.handleRegistration(event, true)" class="space-y-4">
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Child's Name (Required)</label><input type="text" id="child-name-init" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Child's Age (4-18)</label><input type="number" id="child-age-init" min="4" max="18" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required value="8"></div>
+                        <div><label class="block text-sm font-medium text-slate-700 mb-1">Parent/Guardian Name</label><input type="text" id="parent-name-init" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required></div>
+                        <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition shadow-sm font-medium">Start Assessment</button>
+                    </form>
+                </div>
+            </div>
+
+
             <!-- DASHBOARD -->
-            <div id="view-dashboard" class="view-section space-y-6 max-w-4xl mx-auto">
+            <div id="view-dashboard" class="view-section space-y-6 max-w-4xl mx-auto hidden">
                 <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-                    <h3 class="text-lg font-semibold mb-4 text-slate-800">Candidate Registration</h3>
+                    <h3 class="text-lg font-semibold mb-4 text-slate-800">Candidate Profile</h3>
                     <form id="registration-form" onsubmit="app.handleRegistration(event)" class="space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label class="block text-sm font-medium text-slate-700 mb-1">Child's Name</label><input type="text" id="child-name" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" required></div>
@@ -265,28 +313,82 @@
         </div>
     </main>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    const userProvidedConfig = {};
-    const apiKey = "AIzaSyDACORYtVjO-pCuc3qEbYrCaUElGpK3n5U"; 
-
-    let useLocalStorage = false;
-    let firebaseApp, auth, db;
+<script>
+    // --- JWT & API CONFIGURATION ---
     let currentUser = null;
-    let appId = 'default-app';
+    const API_BASE_URL = window.API_BASE_URL || 'http://localhost:5000/api';
+    
+    // JWT token management
+    const tokenManager = {
+        getToken: () => localStorage.getItem('access_token'),
+        setToken: (token) => localStorage.setItem('access_token', token),
+        clearToken: () => localStorage.removeItem('access_token'),
+        isAuthenticated: () => !!localStorage.getItem('access_token')
+    };
+    
+    // API helper function
+    const apiCall = async (endpoint, options = {}) => {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+        
+        const token = tokenManager.getToken();
+        console.log(`[API] ${options.method || 'GET'} ${endpoint} - Token present: ${!!token}`);
+        
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...options,
+                headers,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeout);
+            
+            console.log(`[API] Response: ${response.status}`);
+            // Log raw response body for diagnostics
+            try {
+                const raw = await response.clone().text();
+                console.log('[API] Raw response body:', raw);
+            } catch (e) {
+                console.warn('[API] Could not read response body');
+            }
 
-    let firebaseConfig = {};
-    try {
-        if (Object.keys(userProvidedConfig).length > 0) { firebaseConfig = userProvidedConfig; appId = userProvidedConfig.projectId || 'local-app'; } 
-        else if (typeof __firebase_config !== 'undefined') { firebaseConfig = JSON.parse(__firebase_config); appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app'; }
-    } catch (e) { }
+            if (response.status === 401) {
+                tokenManager.clearToken();
+                return null;
+            }
 
-    if (Object.keys(firebaseConfig).length > 0) {
-        try { firebaseApp = initializeApp(firebaseConfig); auth = getAuth(firebaseApp); db = getFirestore(firebaseApp); } catch (e) { useLocalStorage = true; }
-    } else { useLocalStorage = true; }
+            // Try to parse JSON, but if parsing fails log the raw text for diagnosis
+            try {
+                return await response.json();
+            } catch (parseErr) {
+                try {
+                    const txt = await response.clone().text();
+                    console.warn('[API] Response not JSON:', txt);
+                } catch (tErr) {
+                    console.warn('[API] Failed to read non-JSON response');
+                }
+                return null;
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.error('API Timeout:', endpoint);
+                app.showNotification('Request timeout - Cloud service may be unavailable', 'error');
+            } else {
+                console.error('API Error:', error);
+                app.showNotification('Network error occurred', 'error');
+            }
+            return null;
+        }
+    };
 
     const state = {
         profile: { childName: '', parentName: '', age: 8 },
@@ -297,16 +399,18 @@
         currentModuleData: [], currentQuestionIndex: 0, currentScoreInModule: 0
     };
 
+    // Placeholder Question banks (used if AI generation fails or for simplicity)
     const fallbackQuestions = {
-        magnitude: [{q:"Larger?",options:["15","51"],a:"51"},{q:"Smaller?",options:["102","98"],a:"98"},{q:"Largest",options:["33","43","34"],a:"43"}],
-        estimation: [{q:"12+29 approx?",options:["40","50"],a:"40"},{q:"105-48 approx?",options:["50","100"],a:"50"}],
-        facts: [{q:"7+6=",options:["13","14"],a:"13"},{q:"8x5=",options:["40","45"],a:"40"}],
-        sequencing: [{q:"2,4,6,?",options:["8","9"],a:"8"},{q:"10,20,30,?",options:["40","50"],a:"40"}],
-        spatial: [{q:"3 sides?",options:["Triangle","Square"],a:"Triangle"},{q:"Cube is?",options:["2D","3D"],a:"3D"}],
-        memory: [{q:"Remember 5,9. First?",options:["5","9"],a:"5"},{q:"Last of 842?",options:["2","4"],a:"2"}]
+        magnitude: [{q:"Larger?",options:["15","51"],a:"51"},{q:"Smaller?",options:["102","98"],a:"98"},{q:"Largest",options:["33","43","34"],a:"43"},{q:"Which is smaller: 7 or 17?",options:["7","17"],a:"7"},{q:"Order from small to large: 9, 2, 5",options:["9, 2, 5","2, 5, 9"],a:"2, 5, 9"}],
+        estimation: [{q:"12+29 approx?",options:["40","50","30"],a:"40"},{q:"105-48 approx?",options:["50","100","60"],a:"50"},{q:"Around how many apples are in 4 bags of 6?",options:["20","40"],a:"20"},{q:"Estimate 72 / 9",options:["8","10"],a:"8"},{q:"Is 39 + 18 closer to 50 or 60?",options:["50","60"],a:"60"}],
+        facts: [{q:"7+6=",options:["13","14","12"],a:"13"},{q:"8x5=",options:["40","45","35"],a:"40"},{q:"9-2=",options:["6","7","8"],a:"7"},{q:"18/3=",options:["6","5","7"],a:"6"},{q:"4+9=",options:["13","14","15"],a:"13"}],
+        sequencing: [{q:"2,4,6,?",options:["8","9","10"],a:"8"},{q:"10,20,30,?",options:["40","50","35"],a:"40"},{q:"5, 10, 15, ?",options:["18","20"],a:"20"},{q:"9, 7, 5, ?",options:["3","4"],a:"3"},{q:"1, 2, 4, 8, ?",options:["16","10"],a:"16"}],
+        spatial: [{q:"3 sides?",options:["Triangle","Square"],a:"Triangle"},{q:"Cube is?",options:["2D","3D"],a:"3D"},{q:"Which shape has parallel sides?",options:["Circle","Rectangle"],a:"Rectangle"},{q:"How many corners does a square have?",options:["4","3"],a:"4"},{q:"Which way is left?",options:["\u2190 Left","Right \u2192"],a:"\u2190 Left"}],
+        memory: [{q:"Remember 5,9. First?",options:["5","9"],a:"5"},{q:"Last of 842?",options:["2","4"],a:"2"},{q:"Recall: 7, 3, 1. Middle number?",options:["3","7"],a:"3"},{q:"Which number comes before 11?",options:["10","12"],a:"10"},{q:"Digits of 60: 6 and ...?",options:["0","1"],a:"0"}]
     };
+    const checklistQuestions = ["Count backwards easily?", "Recognize number sequences?", "Use fingers for simple addition/subtraction (age 8+)?", "Estimate quantities accurately?", "Tell analog time and manage time?", "Quickly recall multiplication facts?", "Align numbers correctly for column math?", "Show high math anxiety or avoidance?"];
 
-    // --- NEON RUNNER GAME ---
+    // --- GAMES CLASSES ---
     class SpaceGame {
         constructor() {
             this.canvas = document.getElementById('spaceCanvas');
@@ -319,16 +423,19 @@
         }
         resize() { if(this.canvas.parentElement) { this.canvas.width = this.canvas.parentElement.clientWidth; this.canvas.height = this.canvas.parentElement.clientHeight; this.playerY = this.canvas.height - 100; } }
         start() {
-            this.active = true; this.score = 0; this.lives = 3; this.gates = []; this.particles = []; this.speed = 1.2; this.playerX = this.canvas.width / 2;
+            this.active = true; this.score = 0; this.lives = 3; this.gates = []; this.particles = []; this.speed = 1.5; this.playerX = this.canvas.width / 2;
             this.stars = Array(100).fill().map(()=>({x:Math.random()*this.canvas.width,y:Math.random()*this.canvas.height,size:Math.random()*2,speed:Math.random()*3+0.5}));
             this.spawnGate(); requestAnimationFrame(t => this.loop(t));
         }
         updateUI() { document.getElementById('space-score-disp').innerText = this.score; document.getElementById('space-lives-disp').innerText = "❤️".repeat(this.lives); if(this.currEq) document.getElementById('space-question-disp').innerText = this.currEq.text; }
         spawnGate() {
-            let a=Math.floor(Math.random()*10)+1, b=Math.floor(Math.random()*10)+1, op=Math.random()>.5?'+':'-', ans=op==='+'?a+b:a-b;
-            if(ans<0){let t=a;a=b;b=t;ans=a-b;} this.currEq={text:`${a} ${op} ${b} = ?`,ans};
+            let a=Math.floor(Math.random()*10)+2, b=Math.floor(Math.random()*10)+1, op=Math.random()>.5?'+':'x', ans=op==='+'?a+b:a*b;
+            if (op === 'x' && a*b > 50) ans = a*b, a = 10, b = 5; // Keep multiplication simple
+            if(op==='+'&&a+b>20) ans=a+b, a=10, b=10; // Keep addition simple
+            this.currEq={text:`${a} ${op} ${b} = ?`,ans};
             this.updateUI();
             let wrong=ans+(Math.random()>.5?1:-1)*(Math.floor(Math.random()*3)+1);
+            if (wrong === ans) wrong += 1; // Ensure wrong answer is different
             this.gates.push({y:-100,left:Math.random()>.5,cor:ans,wro:wrong,hit:false});
         }
         loop() {
@@ -347,19 +454,47 @@
                 this.ctx.fillText(g.left?g.cor:g.wro,lx+gw/2,g.y+50); this.ctx.fillText(g.left?g.wro:g.cor,rx+gw/2,g.y+50);
 
                 if(!g.hit && g.y+gh>this.playerY && g.y<this.playerY+40) {
-                    if((this.playerX<mid) === g.left) { this.score+=10; this.speed+=0.05; g.hit=true; } 
-                    else { this.lives--; g.hit=true; if(this.lives<=0){this.active=false;document.getElementById('space-gameover-overlay').classList.remove('hidden');document.getElementById('space-final-score').innerText=this.score;if(this.score>state.scores.neonRunner){state.scores.neonRunner=this.score;app.saveData();}} }
+                    const playerCenter = this.playerX;
+                    const isPlayerLeft = playerCenter < mid;
+                    
+                    if (isPlayerLeft === g.left) { 
+                        this.score+=10; 
+                        this.speed=Math.min(4, this.speed+0.05); 
+                        g.hit=true; 
+                        app.showNotification("Correct! +10", "success");
+                    } 
+                    else { 
+                        this.lives--; 
+                        g.hit=true; 
+                        app.showNotification("Wrong answer!", "error");
+                        if(this.lives<=0){
+                            this.active=false;
+                            document.getElementById('space-gameover-overlay').classList.remove('hidden');
+                            document.getElementById('space-final-score').innerText=this.score;
+                            if(this.score>state.scores.neonRunner){
+                                state.scores.neonRunner=this.score;
+                                apiCall('/assessment/game-score', {
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                        game_name: 'neon_runner',
+                                        score: this.score
+                                    })
+                                });
+                                app.saveData();
+                            }
+                        }
+                    }
                     this.updateUI();
                 }
             });
             this.gates=this.gates.filter(g=>g.y<this.canvas.height+100);
             
-            this.ctx.save(); this.ctx.translate(this.playerX,this.playerY); this.ctx.beginPath(); this.ctx.moveTo(0,-30); this.ctx.lineTo(20,20); this.ctx.lineTo(0,10); this.ctx.lineTo(-20,20); this.ctx.fillStyle='#c026d3'; this.ctx.fill(); this.ctx.restore();
+            // Draw Player Ship (Simple triangle)
+            this.ctx.save(); this.ctx.translate(this.playerX,this.playerY); this.ctx.beginPath(); this.ctx.moveTo(0,-30); this.ctx.lineTo(20,20); this.ctx.lineTo(0,10); this.ctx.lineTo(-20,20); this.ctx.closePath(); this.ctx.fillStyle='#c026d3'; this.ctx.fill(); this.ctx.restore();
             requestAnimationFrame(()=>this.loop());
         }
     }
 
-    // --- AQUA MATH GAME ---
     class AquaGame {
         constructor() {
             this.canvas = document.getElementById('aquaCanvas');
@@ -373,25 +508,30 @@
                 const r = this.canvas.getBoundingClientRect();
                 this.handleClick({offsetX: e.touches[0].clientX - r.left, offsetY: e.touches[0].clientY - r.top});
             }, {passive: false});
+            this.gameTimer = null;
         }
         resize() { if(this.canvas.parentElement){this.canvas.width=this.canvas.parentElement.clientWidth;this.canvas.height=this.canvas.parentElement.clientHeight;} }
         start() {
             this.active = true; this.score = 0; this.bubbles = []; this.frameCount = 0;
-            this.rule = Math.random() > 0.5 ? "even" : "odd"; // Simple start rule
+            this.rule = Math.random() > 0.5 ? "even" : "odd";
             document.getElementById('aqua-mission').innerText = this.rule === "even" ? "Pop Even Numbers!" : "Pop Odd Numbers!";
             document.getElementById('aqua-overlay').classList.add('hidden');
+            document.getElementById('aqua-score').innerText = this.score;
+
+            if (this.gameTimer) clearTimeout(this.gameTimer);
+            this.gameTimer = setTimeout(() => this.stop(), 30000); // 30 second game
+            
             requestAnimationFrame(() => this.loop());
         }
         spawnBubble() {
             const r = 30 + Math.random()*20;
-            // Calculate speed offset based on score to increase difficulty gradually
-            const speedOffset = this.score * 0.02; 
+            const speedOffset = Math.min(1.5, this.score / 200); // Speed up over time
             this.bubbles.push({
                 x: r + Math.random() * (this.canvas.width - 2*r),
                 y: this.canvas.height + r,
                 r: r,
                 val: Math.floor(Math.random() * 50) + 1,
-                speed: (0.5 + Math.random() * 1.0) + speedOffset, // Start slow (0.5-1.5 range) and increase
+                speed: (0.5 + Math.random() * 1.0) + speedOffset, 
                 color: `hsla(${180 + Math.random()*40}, 80%, 60%, 0.6)`
             });
         }
@@ -402,13 +542,18 @@
                 const b = this.bubbles[i];
                 const dist = Math.sqrt((ex - b.x)**2 + (ey - b.y)**2);
                 if (dist < b.r) {
-                    // Check logic
                     const isEven = b.val % 2 === 0;
                     const correct = (this.rule === "even" && isEven) || (this.rule === "odd" && !isEven);
-                    if (correct) { this.score += 10; } else { this.score = Math.max(0, this.score - 5); }
+                    if (correct) { 
+                        this.score += 10; 
+                        app.showNotification("POP! Correct.", "success");
+                    } else { 
+                        this.score = Math.max(0, this.score - 5); 
+                        app.showNotification("Miss! Wrong number.", "error");
+                    }
                     document.getElementById('aqua-score').innerText = this.score;
                     this.bubbles.splice(i, 1);
-                    break; // Only pop top one
+                    break;
                 }
             }
         }
@@ -416,7 +561,7 @@
             if (!this.active) return;
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             this.frameCount++;
-            if (this.frameCount % 60 === 0) this.spawnBubble();
+            if (this.frameCount % Math.max(20, 60 - Math.floor(this.score/50)) === 0) this.spawnBubble(); // Faster spawns over time
 
             // Draw Bubbles
             this.ctx.strokeStyle = '#fff';
@@ -443,7 +588,24 @@
         }
         stop() {
             this.active = false;
-            if (this.score > state.scores.aquaMath) { state.scores.aquaMath = this.score; app.saveData(); }
+            if (this.gameTimer) clearTimeout(this.gameTimer);
+            if (this.score > state.scores.aquaMath) { 
+                state.scores.aquaMath = this.score; 
+                apiCall('/assessment/game-score', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        game_name: 'aqua_math',
+                        score: this.score
+                    })
+                });
+                app.saveData(); 
+            }
+            document.getElementById('aqua-overlay').innerHTML = `
+                <h2 class="text-4xl font-bold text-cyan-300 mb-2">TIME UP!</h2>
+                <p class="text-white text-xl mb-6">Final Score: <span class="font-bold text-yellow-300">${this.score}</span></p>
+                <button onclick="app.startAquaGame()" class="px-6 py-2 border border-white text-white hover:bg-white hover:text-black transition rounded">Play Again</button>
+                <button onclick="app.navigateTo('dashboard')" class="mt-4 text-gray-400 hover:text-white text-sm">Exit</button>
+            `;
             document.getElementById('aqua-overlay').classList.remove('hidden');
         }
     }
@@ -452,36 +614,302 @@
     const aquaGame = new AquaGame();
 
     window.app = {
-        init: async () => {
-            if (useLocalStorage) { app.setLocalModeUI(); app.loadFromLocalStorage(); }
-            else { 
-                onAuthStateChanged(auth, (user) => {
-                    if (user) { currentUser = user; app.setupDataListener(user.uid); document.getElementById('auth-text').innerText = "Online"; document.getElementById('auth-indicator').classList.replace('bg-yellow-500', 'bg-green-500'); }
-                });
-                signInAnonymously(auth).catch(() => { useLocalStorage=true; app.setLocalModeUI(); app.loadFromLocalStorage(); });
+        // In index.html, replace the init function:
+
+init: async () => {
+    console.log('[INIT] Starting initialization...');
+    console.log('[INIT] Token present:', tokenManager.isAuthenticated());
+    
+    if (tokenManager.isAuthenticated()) {
+        try {
+            const result = await apiCall('/auth/verify', { method: 'GET' });
+            console.log('[INIT] Verify result:', result);
+            
+            if (result && result.user) {
+                currentUser = result.user;
+                console.log('[INIT] User authenticated:', currentUser.username);
+                
+                // Load profile from backend
+                await app.loadUserProfile();
+                console.log('[INIT] Profile loaded:', state.profile);
+                
+                document.getElementById('auth-text').innerText = currentUser.email || 'Authenticated';
+                document.getElementById('auth-indicator').classList.replace('bg-gray-300', 'bg-green-500');
+                document.getElementById('user-id-display').innerText = currentUser.email || currentUser.id;
+                app.showNotification('Token verified — welcome back', 'success');
+                
+                // Check if profile setup is needed
+                if (!state.profile.childName) {
+                    console.log('[INIT] No child name found, showing profile setup');
+                    app.showAuthUI('view-profile-setup');
+                } else {
+                    console.log('[INIT] Profile exists, showing app UI');
+                    app.showAppUI();
+                }
+            } else {
+                console.log('[INIT] Verify failed, clearing token');
+                app.showNotification('Token verification failed — please sign in', 'error');
+                tokenManager.clearToken();
+                app.showLoginUI();
             }
-            // Update Dashboard scores
-            app.updateDashboardUI();
+        } catch (error) {
+            console.error('[INIT] Error during verify:', error);
+            app.showNotification('Error verifying token — sign in again', 'error');
+            tokenManager.clearToken();
+            app.showLoginUI();
+        }
+    } else {
+        console.log('[INIT] No token found, showing login');
+        app.showLoginUI();
+    }
+    
+    app.renderChecklistForm();
+    app.initCanvas();
+},
+
+        showLoginUI: () => {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            
+            // Create or show login section
+            let loginView = document.getElementById('view-login');
+            if (!loginView) {
+                const contentArea = document.getElementById('content-area');
+                loginView = document.createElement('div');
+                loginView.id = 'view-login';
+                loginView.className = 'view-section flex items-center justify-center h-full -mt-16';
+                loginView.innerHTML = `
+                    <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md">
+                        <div class="text-center mb-8">
+                            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
+                                <i class="fa-solid fa-brain"></i>
+                            </div>
+                            <h1 class="text-2xl font-bold text-slate-800">NumSkills<span class="text-blue-600">Pro</span></h1>
+                            <p class="text-slate-500 text-sm mt-2">Secure Assessment Platform</p>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <input type="text" id="login-username" placeholder="Username or Email" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            <input type="password" id="login-password" placeholder="Password" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            <button onclick="app.handleLogin()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition shadow-sm font-medium">
+                                Sign In
+                            </button>
+                        </div>
+                        
+                        <div class="mt-6 pt-6 border-t border-gray-100">
+                            <p class="text-sm text-slate-600 text-center mb-4">New user?</p>
+                            <input type="text" id="reg-username" placeholder="Choose Username" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none mb-2">
+                            <input type="email" id="reg-email" placeholder="Email Address" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none mb-2">
+                            <input type="password" id="reg-password" placeholder="Create Password" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none mb-2">
+                            <button onclick="app.handleRegisterNew()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition shadow-sm font-medium">
+                                Create Account
+                            </button>
+                        </div>
+                    </div>
+                `;
+                contentArea.insertBefore(loginView, contentArea.firstChild);
+            }
+            
+            loginView.classList.remove('hidden');
+            document.getElementById('sidebar').classList.add('hidden');
+            document.getElementById('main-header').classList.add('hidden');
         },
-        setLocalModeUI: () => { document.getElementById('auth-text').innerText = "Offline"; document.getElementById('auth-indicator').classList.replace('bg-yellow-500', 'bg-blue-500'); currentUser = {uid:'local'}; },
-        loadFromLocalStorage: () => { const d = localStorage.getItem('numskills_data'); if(d) { Object.assign(state, JSON.parse(d)); app.updateDashboardUI(); } },
-        setupDataListener: (uid) => { onSnapshot(doc(db, 'artifacts', appId, 'users', uid, 'data', 'assessment_profile'), (snap) => { if(snap.exists()) { Object.assign(state, snap.data()); app.updateDashboardUI(); } }); },
+
+        handleLogin: async () => {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    
+    if (!username || !password) {
+        app.showNotification('Please enter username/email and password', 'error');
+        return;
+    }
+    
+    console.log('[LOGIN] Attempting login for:', username);
+    
+    const result = await apiCall('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+            username: username.includes('@') ? undefined : username,
+            email: username.includes('@') ? username : undefined,
+            password: password
+        })
+    });
+    
+    console.log('[LOGIN] Login response:', result);
+    
+    if (result && result.access_token) {
+        tokenManager.setToken(result.access_token);
+        currentUser = result.user;
+        console.log('[LOGIN] Token stored, calling init()');
+        app.showNotification('Login successful!', 'success');
+        
+        // Reinitialize immediately to apply the token
+        try { await app.init(); } catch (e) { console.error('Init after login failed', e); }
+    } else {
+        app.showNotification(result?.error || 'Login failed', 'error');
+    }
+},
+
+        handleRegisterNew: async () => {
+            const username = document.getElementById('reg-username').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            
+            if (!username || !email || !password) {
+                app.showNotification('Please fill in all fields', 'error');
+                return;
+            }
+            
+            const result = await apiCall('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify({ username, email, password })
+            });
+            
+            if (result && result.access_token) {
+                tokenManager.setToken(result.access_token);
+                currentUser = result.user;
+                app.showNotification('Account created successfully!', 'success');
+                app.init();
+            } else {
+                app.showNotification(result?.error || 'Registration failed', 'error');
+            }
+        },
+
+        loadUserProfile: async () => {
+            console.log('[PROFILE] Loading user profile...');
+            try {
+                const result = await apiCall('/assessment/profile', { method: 'GET' });
+                console.log('[PROFILE] Profile API result:', result);
+                
+                if (result && result.profile) {
+                    const p = result.profile;
+                    state.profile = {
+                        childName: p.child_name || '',
+                        parentName: p.parent_name || '',
+                        age: p.child_age || 8
+                    };
+                    console.log('[PROFILE] Profile updated from API:', state.profile);
+                } else if (result && result.child_name) {
+                    // Handle case where API returns flat object
+                    state.profile = {
+                        childName: result.child_name || '',
+                        parentName: result.parent_name || '',
+                        age: result.child_age || 8
+                    };
+                    console.log('[PROFILE] Profile updated (flat response):', state.profile);
+                } else {
+                    console.log('[PROFILE] No profile data found, using defaults');
+                }
+            } catch (error) {
+                console.error('[PROFILE] Error loading profile:', error);
+            }
+        },
+        
+        // Auth UI Toggles - Now accepts an optional target view ID
+        showAuthUI: (targetView = 'view-loading') => {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(targetView).classList.remove('hidden');
+            document.getElementById('sidebar').classList.add('hidden');
+            document.getElementById('main-header').classList.add('hidden');
+            document.getElementById('main-container').classList.remove('md:ml-64');
+            // If showing profile setup, pre-fill if data was loaded from local storage
+            if (targetView === 'view-profile-setup') {
+                document.getElementById('child-name-init').value = state.profile.childName || '';
+                document.getElementById('child-age-init').value = state.profile.age || 8;
+                document.getElementById('parent-name-init').value = state.profile.parentName || '';
+            }
+        },
+
+        showAppUI: () => {
+            document.getElementById('view-loading').classList.add('hidden');
+            document.getElementById('view-profile-setup').classList.add('hidden'); // Hide setup just in case
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('main-header').classList.remove('hidden');
+            document.getElementById('main-container').classList.add('md:ml-64');
+            app.navigateTo('dashboard');
+        },
+
+        // Auth/Logout
+        signOutUser: async () => {
+            tokenManager.clearToken();
+            currentUser = null;
+            app.showLoginUI();
+            app.showNotification('Signed out successfully', 'success');
+        },
+
+        // Data Management Logic
         saveData: async (manual) => {
-            if(useLocalStorage) { localStorage.setItem('numskills_data', JSON.stringify(state)); if(manual) app.showNotification("Saved locally"); return; }
-            if(!currentUser) return;
-            try { await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'data', 'assessment_profile'), state, {merge:true}); if(manual) app.showNotification("Saved to Cloud"); } catch(e) {}
+            if (!currentUser) {
+                app.showNotification('Not authenticated', 'error');
+                return;
+            }
+            
+            try {
+                // Save profile
+                await apiCall('/assessment/profile', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        child_name: state.profile.childName,
+                        child_age: state.profile.age,
+                        parent_name: state.profile.parentName
+                    })
+                });
+                
+                if (manual) app.showNotification('Saved to Cloud');
+                app.updateDashboardUI();
+            } catch (e) {
+                console.error('Error saving data:', e);
+                if (manual) app.showNotification('Error saving data!', 'error');
+            }
+        },
+        
+        // Manual Cloud Sync (Backup/Restore for Drive)
+        exportData: () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `numskills_backup_${state.profile.childName || 'data'}.json`);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        },
+
+        importData: (input) => {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    Object.assign(state, imported);
+                    app.updateDashboardUI();
+                    app.saveData(true); 
+                    app.showNotification("Data Imported Successfully!");
+                } catch (err) {
+                    app.showNotification("Invalid file format", "error");
+                }
+            };
+            reader.readAsText(file);
         },
 
         navigateTo: (viewId) => {
-            spaceGame.active = false; aquaGame.active = false; // Stop loop games
+            spaceGame.active = false; aquaGame.active = false; 
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active', 'theme-green', 'theme-purple', 'theme-cyan', 'theme-amber', 'border-r-4', 'border-blue-600', 'font-semibold'));
             
             let target = '', navId = `nav-${viewId}`;
-            if (viewId.startsWith('module-')) { target = 'view-game'; app.startModule(viewId.split('-')[1]); }
+            if (viewId.startsWith('module-')) { 
+                target = 'view-game'; 
+                app.startModule(viewId.split('-')[1]); 
+                const titleMap = { magnitude: "Number Magnitude", estimation: "Estimation Tasks", facts: "Fact Retrieval", sequencing: "Number Sequencing", spatial: "Spatial Reasoning", memory: "Working Memory", consolidated: "Consolidated Exam" };
+                document.getElementById('game-title').innerText = titleMap[viewId.split('-')[1]] || 'Assessment Module';
+            }
             else target = `view-${viewId}`;
             
-            document.getElementById(target).classList.remove('hidden');
+            const targetEl = document.getElementById(target);
+            if(targetEl) targetEl.classList.remove('hidden');
+            
+            document.getElementById('page-title').innerText = document.getElementById(navId)?.innerText.trim() || target.replace('view-', '').toUpperCase();
+
             const navEl = document.getElementById(navId);
             if(navEl) {
                 navEl.classList.add('active');
@@ -498,136 +926,404 @@
             if(window.innerWidth < 768) document.getElementById('sidebar').classList.add('-translate-x-full');
         },
 
-        // --- FACT MATCH LOGIC ---
+        // Games Logic
         startFactMatch: () => {
-            const grid = document.getElementById('match-grid');
-            grid.innerHTML = '';
-            document.getElementById('match-complete').classList.add('hidden');
-            
-            // Generate Pairs (Simple facts)
-            const pairs = [
-                {q:'2+2', a:'4'}, {q:'5+3', a:'8'}, {q:'10-4', a:'6'}, {q:'3x3', a:'9'},
-                {q:'Half of 10', a:'5'}, {q:'12-2', a:'10'}, {q:'4+1', a:'5'}, {q:'1+1', a:'2'}
-            ];
-            // Pick 8 items (total 16 cards)
-            const deck = [];
-            pairs.slice(0, 8).forEach((p, i) => {
-                deck.push({ id: i, text: p.q, type: 'q', matchId: i });
-                deck.push({ id: i, text: p.a, type: 'a', matchId: i });
-            });
-            // Shuffle
+            const grid = document.getElementById('match-grid'); grid.innerHTML = ''; document.getElementById('match-complete').classList.add('hidden');
+            const pairs = [{q:'2+2', a:'4'}, {q:'5+3', a:'8'}, {q:'10-4', a:'6'}, {q:'3x3', a:'9'},{q:'Half of 10', a:'5'}, {q:'12-2', a:'10'}, {q:'4+1', a:'5'}, {q:'1+1', a:'2'}];
+            const deck = []; pairs.slice(0, 8).forEach((p, i) => { deck.push({ id: i, text: p.q, type: 'q', matchId: i }); deck.push({ id: i, text: p.a, type: 'a', matchId: i }); });
             deck.sort(() => Math.random() - 0.5);
-            
-            let firstCard = null;
-            let moves = 0;
-            let matches = 0;
+            let firstCard = null, moves = 0, matches = 0;
             document.getElementById('match-moves').innerText = 0;
+            
+            const totalCards = deck.length;
+            const maxScore = 100;
+            const perfectMoves = totalCards; 
+            const movesPenalty = 5; 
 
-            deck.forEach((card, idx) => {
-                const el = document.createElement('div');
-                el.className = 'memory-card cursor-pointer h-24';
-                el.innerHTML = `
-                    <div class="memory-inner">
-                        <div class="memory-front"><i class="fa-solid fa-question text-2xl"></i></div>
-                        <div class="memory-back">${card.text}</div>
-                    </div>
-                `;
+            deck.forEach((card, index) => {
+                const el = document.createElement('div'); el.className = 'memory-card cursor-pointer h-24';
+                el.id = `card-${index}`;
+                el.innerHTML = `<div class="memory-inner"><div class="memory-front flex-col text-sm"><i class="fa-solid fa-square-root-variable text-2xl mb-1"></i>Tap to Flip</div><div class="memory-back">${card.text}</div></div>`;
                 el.onclick = () => {
                     if (el.classList.contains('flipped') || el.classList.contains('matched') || document.querySelectorAll('.flipped:not(.matched)').length >= 2) return;
-                    
                     el.classList.add('flipped');
-                    
-                    if (!firstCard) {
-                        firstCard = { el, card };
-                    } else {
-                        moves++;
-                        document.getElementById('match-moves').innerText = moves;
+                    if (!firstCard) { firstCard = { el, card }; } 
+                    else {
+                        moves++; document.getElementById('match-moves').innerText = moves;
                         if (firstCard.card.matchId === card.matchId) {
-                            // Match
-                            el.classList.add('matched');
-                            firstCard.el.classList.add('matched');
-                            firstCard = null;
-                            matches++;
-                            if(matches === 8) {
+                            el.classList.add('matched'); firstCard.el.classList.add('matched'); firstCard = null; matches++;
+                            if(matches === 8) { 
+                                const finalScore = Math.max(0, maxScore - Math.max(0, moves - perfectMoves) * movesPenalty);
                                 document.getElementById('match-complete').classList.remove('hidden');
-                                state.scores.factMatch = Math.max(state.scores.factMatch, 100 - (moves-8)*5); // Simple score logic
-                                app.saveData();
+                                
+                                if (finalScore > state.scores.factMatch) {
+                                    state.scores.factMatch = finalScore;
+                                    apiCall('/assessment/game-score', {
+                                        method: 'POST',
+                                        body: JSON.stringify({
+                                            game_name: 'fact_match',
+                                            score: finalScore
+                                        })
+                                    });
+                                }
+                                app.saveData(false); 
                             }
-                        } else {
-                            // Mismatch
-                            setTimeout(() => {
-                                el.classList.remove('flipped');
-                                firstCard.el.classList.remove('flipped');
-                                firstCard = null;
-                            }, 1000);
+                        } else { 
+                            const card1 = firstCard.el;
+                            const card2 = el;
+                            firstCard = null;
+                            setTimeout(() => { 
+                                card1.classList.remove('flipped'); 
+                                card2.classList.remove('flipped'); 
+                            }, 1000); 
                         }
                     }
                 };
                 grid.appendChild(el);
             });
         },
-
-        // --- AQUA GAME TRIGGERS ---
         startAquaGame: () => { aquaGame.start(); },
-
-        // --- SPACE GAME TRIGGERS ---
         startSpaceGame: () => { document.getElementById('space-start-overlay').classList.add('hidden'); document.getElementById('space-gameover-overlay').classList.add('hidden'); spaceGame.start(); },
         resetSpaceGameUI: () => { document.getElementById('space-start-overlay').classList.remove('hidden'); document.getElementById('space-gameover-overlay').classList.add('hidden'); },
 
-        // ... Rest of existing functions (modules, registration, report, etc) ...
+        // Modules Logic
         startModule: async (type) => {
             const isConsolidated = type === 'consolidated';
             const cont = document.getElementById('game-container');
             cont.className = isConsolidated ? "bg-green-50 p-6 rounded-lg shadow-sm border border-green-200 min-h-[400px] flex flex-col transition-colors" : "bg-white p-6 rounded-lg shadow-sm border border-slate-200 min-h-[400px] flex flex-col transition-colors";
+            
             document.getElementById('loading-overlay').classList.remove('hidden');
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 500)); 
+
             state.currentModuleType = type;
-            state.currentModuleData = type === 'consolidated' ? [...fallbackQuestions.magnitude, ...fallbackQuestions.estimation] : (fallbackQuestions[type] || fallbackQuestions['magnitude']);
-            state.currentQuestionIndex = 0; state.currentScoreInModule = 0;
+            let questions;
+
+            if (type === 'consolidated') {
+                questions = [
+                    ...fallbackQuestions.magnitude.slice(0, 1),
+                    ...fallbackQuestions.estimation.slice(0, 1),
+                    ...fallbackQuestions.facts.slice(0, 1),
+                    ...fallbackQuestions.sequencing.slice(0, 1),
+                    ...fallbackQuestions.spatial.slice(0, 1),
+                    ...fallbackQuestions.memory.slice(0, 1)
+                ];
+                questions.sort(() => Math.random() - 0.5); 
+            } else {
+                questions = fallbackQuestions[type] || fallbackQuestions['magnitude'];
+            }
+            
+            state.currentModuleData = questions.map(q => ({...q, userAnswer: undefined, isCorrect: undefined})); 
+            state.totalQuestions[type] = questions.length;
+            state.currentQuestionIndex = 0; 
+            state.currentScoreInModule = 0;
+            
             document.getElementById('loading-overlay').classList.add('hidden');
             app.renderQuestion();
         },
+
         renderQuestion: () => {
-            const q = state.currentModuleData[state.currentQuestionIndex];
+            const questions = state.currentModuleData;
+            const q = questions[state.currentQuestionIndex];
+            
+            document.getElementById('next-btn').disabled = true;
+            document.getElementById('game-feedback').innerHTML = '';
+            
             if(!q) { app.finishModule(); return; }
+
+            document.getElementById('game-progress').innerText = `Q: ${state.currentQuestionIndex + 1}/${questions.length}`;
             document.getElementById('question-text').innerText = q.q;
             const div = document.getElementById('answers-area'); div.innerHTML = '';
+
+            const isAnswered = q.userAnswer !== undefined;
+
             q.options.forEach(opt => {
                 const btn = document.createElement('button');
-                btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded hover:border-blue-400 transition";
+                btn.className = "w-full p-4 text-left border-2 border-slate-200 rounded transition font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-500 shadow-sm";
                 btn.innerText = opt;
-                btn.onclick = () => { 
-                    if(opt===q.a) state.currentScoreInModule++; 
-                    document.getElementById('next-btn').disabled=false; 
-                };
+                btn.setAttribute('data-answer', opt);
+
+                if (isAnswered) {
+                    btn.disabled = true;
+                    if (opt === q.a) {
+                        btn.classList.replace('hover:bg-blue-50', 'bg-green-100');
+                        btn.classList.add('border-green-600', 'text-green-800');
+                    } else if (opt === q.userAnswer) {
+                        btn.classList.replace('hover:bg-blue-50', 'bg-red-100');
+                        btn.classList.add('border-red-600', 'text-red-800');
+                    }
+                } else {
+                    btn.onclick = () => { 
+                        q.userAnswer = opt;
+                        const isCorrect = opt === q.a;
+                        q.isCorrect = isCorrect;
+                        
+                        document.getElementById('game-feedback').innerHTML = `<span class="${isCorrect ? 'text-green-600' : 'text-red-600'}">${isCorrect ? 'Correct Answer!' : 'Incorrect. The correct answer is ' + q.a}</span>`;
+                        document.getElementById('next-btn').disabled = false;
+                        
+                        document.querySelectorAll('#answers-area button').forEach(b => {
+                            b.disabled = true;
+                            if (b.getAttribute('data-answer') === q.a) {
+                                b.classList.replace('hover:bg-blue-50', 'bg-green-100');
+                                b.classList.add('border-green-600', 'text-green-800');
+                            } else if (b.getAttribute('data-answer') === opt && !isCorrect) {
+                                b.classList.replace('hover:bg-blue-50', 'bg-red-100');
+                                b.classList.add('border-red-600', 'text-red-800');
+                            }
+                        });
+                    };
+                }
                 div.appendChild(btn);
             });
+            if (isAnswered) document.getElementById('next-btn').disabled = false;
         },
-        nextQuestion: () => { state.currentQuestionIndex++; app.renderQuestion(); },
-        finishModule: () => { state.scores[state.currentModuleType] = Math.round((state.currentScoreInModule/state.currentModuleData.length)*100); app.saveData(); app.navigateTo('dashboard'); },
+
+        nextQuestion: () => { 
+            const q = state.currentModuleData[state.currentQuestionIndex];
+            if (q && q.isCorrect) state.currentScoreInModule++; 
+            
+            state.currentQuestionIndex++; 
+            app.renderQuestion(); 
+        },
+
+        finishModule: async () => { 
+            const total = state.currentModuleData.length;
+            const scorePct = Math.round((state.currentScoreInModule / total) * 100);
+            state.scores[state.currentModuleType] = scorePct;
+            
+            // Save score to API
+            await apiCall('/assessment/score', {
+                method: 'POST',
+                body: JSON.stringify({
+                    module: state.currentModuleType,
+                    score: state.currentScoreInModule,
+                    total: total,
+                    answers: state.currentModuleData
+                })
+            });
+            
+            app.saveData(true); 
+            app.showNotification(`Module Complete! Score: ${scorePct}%`, "success");
+            app.navigateTo('dashboard'); 
+        },
+
         updateDashboardUI: () => {
-            document.getElementById('child-name').value = state.profile.childName;
+            // Update Dashboard fields
+            document.getElementById('child-name').value = state.profile.childName || '';
+            document.getElementById('child-age').value = state.profile.age || '';
+            document.getElementById('parent-name').value = state.profile.parentName || '';
+            
+            // Update initial setup fields (important if data loaded asynchronously)
+            document.getElementById('child-name-init').value = state.profile.childName || '';
+            document.getElementById('child-age-init').value = state.profile.age || 8;
+            document.getElementById('parent-name-init').value = state.profile.parentName || '';
+
             document.getElementById('dash-neon').innerText = state.scores.neonRunner || 0;
             document.getElementById('dash-aqua').innerText = state.scores.aquaMath || 0;
+            
+            const checklistValues = Object.values(state.checklist);
+            const riskScore = checklistValues.filter(v => v === 'yes').length;
+            state.scores.checklist = riskScore;
+            
+            const modules = ['magnitude', 'estimation', 'facts', 'sequencing', 'spatial', 'memory', 'handwriting', 'consolidated'];
+            let completed = 0;
+            modules.forEach(m => { 
+                if (m === 'handwriting' && state.scores.handwriting > 0) completed++; 
+                else if (m !== 'handwriting' && state.scores[m] > 0) completed++;
+            });
+            
+            const totalModules = modules.length;
+            const pct = Math.round((completed / totalModules) * 100);
+            
+            if(document.getElementById('progress-percent')) document.getElementById('progress-percent').innerText = pct + '%';
+            if(document.getElementById('progress-bar')) document.getElementById('progress-bar').style.width = pct + '%';
+            if(document.getElementById('dashboard-modules-count')) document.getElementById('dashboard-modules-count').innerText = `${completed}/${totalModules}`;
         },
-        handleRegistration: (e) => { e.preventDefault(); state.profile.childName = document.getElementById('child-name').value; app.saveData(); },
-        showNotification: (msg) => { const n = document.getElementById('notification'); document.getElementById('notification-msg').innerText=msg; n.classList.remove('translate-x-full'); setTimeout(()=>n.classList.add('translate-x-full'),2000); },
-        renderChecklistForm: () => { /* Checkbox logic */ },
-        initCanvas: () => { /* Drawing logic */ },
-        clearCanvas: () => { const c=document.getElementById('drawingCanvas'); c.getContext('2d').clearRect(0,0,c.width,c.height); },
-        saveHandwriting: () => { state.scores.handwriting=100; app.saveData(); app.navigateTo('dashboard'); },
+
+        // Handle profile registration
+        handleRegistration: async (e, isInitial = false) => { 
+            e.preventDefault(); 
+            let nameEl, ageEl, parentEl;
+
+            if (isInitial) {
+                nameEl = document.getElementById('child-name-init');
+                ageEl = document.getElementById('child-age-init');
+                parentEl = document.getElementById('parent-name-init');
+            } else {
+                nameEl = document.getElementById('child-name');
+                ageEl = document.getElementById('child-age');
+                parentEl = document.getElementById('parent-name');
+            }
+            
+            state.profile.childName = nameEl.value.trim(); 
+            state.profile.age = parseInt(ageEl.value) || 0; 
+            state.profile.parentName = parentEl.value.trim();
+            
+            if (!state.profile.childName) {
+                app.showNotification("Child's Name is required to proceed.", "error");
+                return;
+            }
+
+            await app.saveData(true); 
+            
+            if (isInitial) {
+                app.showNotification("Profile created! Starting assessment.", "success");
+                app.showAppUI();
+            }
+        },
+        
+        showNotification: (msg, type='success') => { 
+            const n = document.getElementById('notification'); 
+            const m = document.getElementById('notification-msg');
+            m.innerText=msg; 
+            n.classList.remove('border-red-500', 'border-green-500', 'border-blue-500');
+            if(type==='error') n.classList.add('border-red-500'); 
+            else if(type==='success') n.classList.add('border-green-500');
+            else n.classList.add('border-blue-500');
+            n.classList.remove('translate-x-full'); 
+            setTimeout(()=>n.classList.add('translate-x-full'),3000); 
+        },
+
+        renderChecklistForm: () => { 
+            const c = document.getElementById('checklist-container'); if(!c) return; 
+            c.innerHTML = checklistQuestions.map((q, idx) => `
+                <div class="flex items-center justify-between border-b border-gray-100 pb-4 last:border-b-0">
+                    <span class="text-slate-700 text-sm md:text-base flex-1 mr-4">${idx + 1}. ${q}</span>
+                    <div class="flex gap-4">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="radio" name="q${idx}" value="yes" class="form-radio text-blue-600 h-4 w-4" onchange="app.updateChecklistState(${idx}, 'yes')" ${state.checklist[idx]==='yes'?'checked':''}>
+                            <span class="ml-2 text-sm">Yes</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="radio" name="q${idx}" value="no" class="form-radio text-blue-600 h-4 w-4" onchange="app.updateChecklistState(${idx}, 'no')" ${state.checklist[idx]==='no'?'checked':''}>
+                            <span class="ml-2 text-sm">No</span>
+                        </label>
+                    </div>
+                </div>
+            `).join(''); 
+        },
+        updateChecklistState: (idx, val) => { state.checklist[idx] = val; },
+        submitChecklist: async (e) => { 
+            e.preventDefault(); 
+            const allAnswered = checklistQuestions.every((_, idx) => state.checklist[idx] !== undefined);
+            if (!allAnswered) {
+                app.showNotification("Please answer all checklist questions.", "error");
+                return;
+            }
+            
+            // Convert checklist to responses object
+            const responses = {};
+            Object.keys(state.checklist).forEach(idx => {
+                responses[idx] = state.checklist[idx] === 'yes';
+            });
+            
+            // Save to API
+            await apiCall('/assessment/checklist', {
+                method: 'POST',
+                body: JSON.stringify({ responses })
+            });
+            
+            app.saveData(true); 
+            app.showNotification("Checklist saved and score updated!"); 
+            app.navigateTo('dashboard'); 
+        },
+        
+        initCanvas: () => { 
+            const canvas = document.getElementById('drawingCanvas'); if(!canvas) return; const ctx = canvas.getContext('2d'); let painting = false;
+            const resize = () => { const r = canvas.getBoundingClientRect(); canvas.width = r.width; canvas.height = r.height; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#2c3e50'; };
+            window.addEventListener('resize', resize); resize();
+            function getCoords(e) { const r = canvas.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; const cy = e.touches ? e.touches[0].clientY : e.clientY; return {x: cx-r.left, y: cy-r.top}; }
+            function startPosition(e) { painting = true; const coords = getCoords(e); ctx.beginPath(); ctx.moveTo(coords.x, coords.y); } 
+            function finishedPosition() { painting = false; }
+            function draw(e) { if (!painting) return; e.preventDefault(); const coords = getCoords(e); ctx.lineTo(coords.x, coords.y); ctx.stroke(); }
+            canvas.addEventListener('mousedown', startPosition); canvas.addEventListener('mouseup', finishedPosition); canvas.addEventListener('mousemove', draw); 
+            canvas.addEventListener('touchstart', startPosition, {passive: false}); canvas.addEventListener('touchend', finishedPosition); canvas.addEventListener('touchmove', draw, {passive: false});
+        },
+        clearCanvas: () => { 
+            const c=document.getElementById('drawingCanvas'); 
+            c.getContext('2d').clearRect(0,0,c.width,c.height); 
+            app.showNotification("Canvas cleared.");
+        },
+        saveHandwriting: () => { 
+            state.scores.handwriting=100; 
+            app.saveData(true); 
+            app.showNotification("Handwriting task saved (Score: 100 - Completion only)");
+            app.navigateTo('dashboard'); 
+        },
+        
+        // Report Logic
         renderReport: () => { 
-             // Chart update logic with new games included
-             const labels = ["Magnitude", "Estimation", "Facts", "Sequencing", "Spatial", "Memory", "Neon", "Aqua"];
-             const data = labels.map(l => {
-                 const k = l.toLowerCase().replace('neon','neonRunner').replace('aqua','aquaMath');
-                 return state.scores[k] || 0;
-             });
-             const ctx = document.getElementById('radarChart').getContext('2d');
-             if(window.myRadar) window.myRadar.destroy();
-             window.myRadar = new Chart(ctx, { type: 'radar', data: { labels, datasets: [{ label: 'Score', data, backgroundColor: 'rgba(59,130,246,0.2)', borderColor: '#3b82f6' }] }, options: { scales: { r: { suggestedMin: 0, suggestedMax: 100 } } } });
-             document.getElementById('report-child-name').innerText = state.profile.childName;
+            const labels = ["Magnitude", "Estimation", "Facts", "Sequencing", "Spatial", "Memory", "Neon Runner", "Aqua Math Pop", "Fact Match"];
+            const data = [
+                state.scores.magnitude || 0,
+                state.scores.estimation || 0,
+                state.scores.facts || 0,
+                state.scores.sequencing || 0,
+                state.scores.spatial || 0,
+                state.scores.memory || 0,
+                Math.min(100, (state.scores.neonRunner || 0) / 2),
+                Math.min(100, (state.scores.aquaMath || 0) / 2),
+                state.scores.factMatch || 0
+            ];
+            
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            if(window.myRadar) window.myRadar.destroy();
+
+            window.myRadar = new Chart(ctx, { 
+                type: 'radar', 
+                data: { 
+                    labels, 
+                    datasets: [{ 
+                        label: 'Performance Score (0-100)', 
+                        data, 
+                        backgroundColor: 'rgba(59,130,246,0.2)', 
+                        borderColor: '#3b82f6',
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#3b82f6'
+                    }] 
+                }, 
+                options: { 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { 
+                        r: { 
+                            suggestedMin: 0, 
+                            suggestedMax: 100,
+                            pointLabels: {
+                                font: { size: 11, family: 'Inter' }
+                            },
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            angleLines: { color: 'rgba(0, 0, 0, 0.1)' }
+                        } 
+                    },
+                    plugins: { legend: { display: false } }
+                } 
+            });
+            document.getElementById('report-child-name').innerText = state.profile.childName || '--';
+            document.getElementById('report-child-age').innerText = state.profile.age || '--';
+
+            // Report Insights (Placeholder)
+            const insightText = `
+                <h5 class="text-base font-semibold text-slate-800">Manual Summary</h5>
+                <p><strong>Checklist Score:</strong> ${state.scores.checklist}/${checklistQuestions.length} signs observed.</p>
+                <p class="text-slate-500 italic">No AI analysis available in this environment. Please complete all modules and games to establish a complete profile.</p>
+            `;
+            document.getElementById('report-insights').innerHTML = insightText;
+        },
+        
+        generateReportInsights: () => {
+             app.showNotification("AI Analysis not available in this environment.", "error");
+             const insightText = `
+                <h5 class="text-base font-semibold text-slate-800">Manual Summary (Based on Raw Data)</h5>
+                <p><strong>Checklist Score:</strong> ${state.scores.checklist}/${checklistQuestions.length} behavioral signs observed.</p>
+                <p><strong>Highest Scores:</strong> Magnitude (${state.scores.magnitude}%), Neon Runner (High Score: ${state.scores.neonRunner}).</p>
+                <p><strong>Areas to Focus On:</strong> The radar chart visualizes key weaknesses. Any module score below 50% suggests a high need for targeted practice in that specific area (e.g., Fact Retrieval or Sequencing).</p>
+                <p class="text-purple-700 font-medium mt-3">To get a real, personalized AI analysis, please run this application in a supported environment where the Gemini API can be utilized.</p>
+            `;
+            document.getElementById('report-insights').innerHTML = insightText;
         }
+
     };
 
     document.getElementById('sidebar-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('-translate-x-full'));
