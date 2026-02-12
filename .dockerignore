@@ -1,0 +1,13 @@
+venv
+env
+__pycache__
+*.pyc
+.git
+instance
+numskill.db
+.env
+*.sqlite3
+*.log
+node_modules
+dist
+build
